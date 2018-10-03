@@ -1,0 +1,78 @@
+#20181002
+在OHDB的基础之上进行修改：
+1. 在内存中按分区缓存重复的key，重复的文件，以及目录L0层的总key数，记录分区上一次的冷热特性
+【L0每compaction一次就将缓存数据清零一次，保留冷热特性】
+2. L0层compaction时，以重复key中最大的key为分界线，分2个文件写到L1
+3. L0层compaction时，如果某分区连续2次是冷数据，则不与L1层中的数据合并；如果从冷分区变为热分区，则与L1层数据合并
+热数据范围内overlap的文件；若由热变为冷，也不合并；
+4. L0层compaction时，如果需要合并，如果热数据范围覆盖多个文件，判断存在覆盖文件的最大key与热数据集中key的位置关系，
+如果只有几个key却覆盖一个大size文件，则不合并
+5. L0-L2是热数据，L3开始是冷数据，存放有序数据；L2层开始compaction时，如果有超过2个冷文件，就合并所有冷文件和覆盖有序文件
+
+元数据组织形式：
+FileMeata中增加冷热属性和分区号；
+DB元数据组织：ParMeta* files[][];行号和分区号
+ParMeta中包含2个vector，分别存放冷数据FileMeta和有序FileMeata；【冷数据集中存在overlap】
+
+leveldb: A key-value store
+Authors: Sanjay Ghemawat (sanjay@google.com) and Jeff Dean (jeff@google.com)
+
+The code under this directory implements a system for maintaining a
+persistent key/value store.
+
+See doc/index.html for more explanation.
+See doc/impl.html for a brief overview of the implementation.
+
+The public interface is in include/*.h.  Callers should not include or
+rely on the details of any other header files in this package.  Those
+internal APIs may be changed without warning.
+
+Guide to header files:
+
+include/db.h
+    Main interface to the DB: Start here
+
+include/options.h
+    Control over the behavior of an entire database, and also
+    control over the behavior of individual reads and writes.
+
+include/comparator.h
+    Abstraction for user-specified comparison function.  If you want
+    just bytewise comparison of keys, you can use the default comparator,
+    but clients can write their own comparator implementations if they
+    want custom ordering (e.g. to handle different character
+    encodings, etc.)
+
+include/iterator.h
+    Interface for iterating over data. You can get an iterator
+    from a DB object.
+
+include/write_batch.h
+    Interface for atomically applying multiple updates to a database.
+
+include/slice.h
+    A simple module for maintaining a pointer and a length into some
+    other byte array.
+
+include/status.h
+    Status is returned from many of the public interfaces and is used
+    to report success and various kinds of errors.
+
+include/env.h
+    Abstraction of the OS environment.  A posix implementation of
+    this interface is in util/env_posix.cc
+
+include/table.h
+include/table_builder.h
+    Lower-level modules that most clients probably won't use directly
+
+Install
+=======
+
+Get up and running quickly:
+
+    $ autoreconf -i
+    $ ./configure
+    $ make
+    # make install
+    # ldconfig
